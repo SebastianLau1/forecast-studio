@@ -1,0 +1,5 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {predict,evaluate,parseCSV,sample} from '../web/forecast.js';
+test('linear trend extrapolates an exact line',()=>{assert.deepEqual(predict([2,4,6,8],3,'trend'),[10,12,14])});
+test('seasonal baseline repeats the final season',()=>{assert.deepEqual(predict([1,3,2,1,3,2],5,'seasonal',3),[1,3,2,1,3])});
+test('holdout favors the exact linear signal',()=>{const result=evaluate(Array.from({length:40},(_,i)=>i*3+2));assert.equal(result[0].model,'trend');assert.equal(result[0].mae,0);assert.equal(result[0].holdout,8)});
+test('CSV rejects missing dates, duplicate dates, empty and nonfinite values',()=>{const rows=sample('demand').slice(0,25);const csv=r=>'date,value\n'+r.map(x=>`${x.date},${x.value}`).join('\n');assert.equal(parseCSV(csv(rows)).length,25);assert.throws(()=>parseCSV(csv(rows.filter((_,i)=>i!==8))),/evenly/);assert.throws(()=>parseCSV(csv(rows.map((r,i)=>i===1?rows[0]:r))),/unique/);assert.throws(()=>parseCSV(csv(rows.map((r,i)=>i===0?{...r,value:'Infinity'}:r))),/invalid/);assert.throws(()=>parseCSV('date,value\n2026-01-01,2'),/21 observations/)});
