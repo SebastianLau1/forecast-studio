@@ -1,10 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { predict, evaluate, fitHoltWinters, parseCSV, stepDays } from "../web/forecast.js";
+import { models, predict, evaluate, fitHoltWinters, parseCSV, stepDays } from "../web/forecast.js";
 
 const data = (name) => readFile(new URL(`../web/data/${name}`, import.meta.url), "utf8");
 const toCSV = (rows) => `date,value\n${rows.map((row) => `${row.date},${row.value}`).join("\n")}`;
+const pattern = [8, 6, 5, 6, 7, -14, -18];
+const trendingWeeks = Array.from({ length: 84 }, (_, i) => 100 + 0.5 * i + pattern[i % 7]);
 
 test("linear trend extrapolates an exact line", () => {
   assert.deepEqual(predict([2, 4, 6, 8], 3, "trend"), [10, 12, 14]);
@@ -14,11 +16,33 @@ test("seasonal baseline repeats the final season", () => {
   assert.deepEqual(predict([1, 3, 2, 1, 3, 2], 5, "seasonal", 3), [1, 3, 2, 1, 3]);
 });
 
-test("holdout favors the exact linear signal", () => {
+test("holdout scores an exact linear signal perfectly", () => {
   const result = evaluate(Array.from({ length: 40 }, (_, i) => i * 3 + 2));
-  assert.equal(result[0].model, "trend");
+  assert.equal(result.find((r) => r.model === "trend").mae, 0);
   assert.equal(result[0].mae, 0);
   assert.equal(result[0].holdout, 8);
+});
+
+test("baseline models behave as documented", () => {
+  const v = [2, 4, 6, 8, 10];
+  assert.deepEqual(predict(v, 2, "naive"), [10, 10]);
+  assert.deepEqual(predict(v, 2, "mean"), [6, 6]);
+  assert.deepEqual(predict(v, 2, "drift"), [12, 14]);
+  assert.deepEqual(predict(v, 1, "movingAverage", 2), [9]);
+});
+
+test("seasonal naive + drift is exact on a trending seasonal series", () => {
+  const forecast = predict(trendingWeeks, 14, "seasonalDrift", 7);
+  forecast.forEach((value, i) => {
+    const t = 84 + i;
+    assert.ok(Math.abs(value - (100 + 0.5 * t + pattern[t % 7])) < 1e-9, `step ${i + 1}`);
+  });
+});
+
+test("multiplicative Holt-Winters is skipped for series with zero or negative values", () => {
+  const withZero = trendingWeeks.map((v, i) => (i === 3 ? 0 : v));
+  assert.ok(!evaluate(withZero, 7).some((s) => s.model === "holtWintersMult"));
+  assert.ok(evaluate(trendingWeeks, 7).some((s) => s.model === "holtWintersMult"));
 });
 
 test("evaluation exposes each model's holdout backtest for charting", () => {
@@ -34,13 +58,11 @@ test("seasonal model is skipped when training data is shorter than the season", 
   assert.ok(!models.includes("seasonal"));
 });
 
-const trendingWeeks = Array.from({ length: 84 }, (_, i) => 100 + 0.5 * i + [8, 6, 5, 6, 7, -14, -18][i % 7]);
-
-test("auto-tuned Holt-Winters wins on a trending weekly series and reports its weights", () => {
+test("auto-tuned Holt-Winters fits a trending weekly series and reports its weights", () => {
   const scores = evaluate(trendingWeeks, 7);
-  assert.equal(scores[0].model, "holtWinters");
-  assert.ok(scores[0].mae < 0.5);
-  for (const key of ["alpha", "beta", "gamma"]) assert.ok(scores[0].weights[key] >= 0 && scores[0].weights[key] <= 1, key);
+  const hw = scores.find((s) => s.model === "holtWinters");
+  assert.ok(hw.mae < 0.5);
+  for (const key of ["alpha", "beta", "gamma"]) assert.ok(hw.weights[key] >= 0 && hw.weights[key] <= 1, key);
   assert.equal(scores.find((s) => s.model === "trend").weights, undefined);
 });
 
@@ -70,8 +92,13 @@ test("every bundled real dataset parses, matches its metadata, and supports its 
     assert.ok(rows.every((row) => row.value > 0), `${meta.id} has no gaps or sentinel values`);
     assert.match(meta.sourceUrl, /^https:\/\//);
     assert.ok(meta.pattern.length > 40, `${meta.id} explains its pattern in plain language`);
-    const models = evaluate(rows.map((row) => row.value), meta.season).map((r) => r.model);
-    assert.ok(models.includes("seasonal"), `${meta.id} has enough history for a ${meta.season}-step season`);
+    const values = rows.map((row) => row.value);
+    const scored = evaluate(values, meta.season);
+    assert.equal(scored.length, models.length, `all ${models.length} models score ${meta.id}`);
+    for (const { id } of models) {
+      const forecast = predict(values, 14, id, meta.season);
+      assert.ok(forecast.length === 14 && forecast.every(Number.isFinite), `${id} forecasts ${meta.id}`);
+    }
   }
 });
 

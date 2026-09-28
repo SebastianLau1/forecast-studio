@@ -30,7 +30,7 @@
           <p class="eyebrow">Time-series playground</p>
           <h1>A clearer view of what’s next.</h1>
         </div>
-        <p class="lede">Real public data: NYC subway ridership, Wikipedia traffic, and Mauna Loa CO₂. Or upload your own. Four models compete on a chronological holdout, and the winner forecasts forward, all in your browser.</p>
+        <p class="lede">Real public data: NYC subway ridership, Wikipedia traffic, and Mauna Loa CO₂. Or upload your own. Fifteen models compete on a chronological holdout, and the winner forecasts forward, all in your browser.</p>
       </section>
 
       <section class="toolbar" aria-label="Forecast setup">
@@ -46,14 +46,8 @@
           </div>
         </div>
         <div class="field">
-          <span class="field-label" id="model-label">Model</span>
-          <div class="segmented" role="radiogroup" aria-labelledby="model-label">
-            <button type="button" role="radio" aria-checked="true" data-model="auto">Auto</button>
-            <button type="button" role="radio" aria-checked="false" data-model="trend">Trend</button>
-            <button type="button" role="radio" aria-checked="false" data-model="seasonal">Seasonal</button>
-            <button type="button" role="radio" aria-checked="false" data-model="holt">Holt</button>
-            <button type="button" role="radio" aria-checked="false" data-model="holtWinters">Holt-Winters</button>
-          </div>
+          <label class="field-label" for="model">Model <output id="model-count"></output></label>
+          <select id="model"><option value="auto">Auto: best holdout score</option></select>
         </div>
         <div class="field field-horizon">
           <label class="field-label" for="horizon">Horizon <output id="horizon-value" for="horizon">14 periods</output></label>
@@ -145,7 +139,10 @@
             <span class="meta" id="holdout-meta">LAST 20% HELD OUT</span>
           </div>
           <ol class="leaderboard" id="comparison"></ol>
-          <p class="hint">Click a model to forecast with it instead of the auto pick.</p>
+          <div class="leaderboard-foot">
+            <p class="hint">Click a model to forecast with it instead of the auto pick.</p>
+            <button type="button" class="btn" id="show-all" aria-expanded="false"></button>
+          </div>
         </div>
         <div class="card">
           <div class="card-head"><h2>Read the signal</h2></div>

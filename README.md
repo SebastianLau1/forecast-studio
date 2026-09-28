@@ -14,11 +14,18 @@ npm test
 
 ## What it does
 
-Pick one of three real datasets or upload (or drop) a `date,value` CSV. Compare four models: linear regression trend, seasonal naive, Holt’s linear smoothing, and additive Holt-Winters (level + trend + season). Model selection uses MAE on the last 20% of observations, then refits the chosen model on the full series.
+Pick one of three real datasets or upload (or drop) a `date,value` CSV. Fifteen models compete, grouped in the model picker:
+
+- **Baselines:** naive (last value), historical mean, random walk with drift, moving average
+- **Seasonal baselines:** seasonal naive, seasonal naive + drift
+- **Regression:** linear trend, trend + seasonal means, seasonal autoregression (least squares on lags 1, 2, and one season)
+- **Exponential smoothing:** simple exponential smoothing, Holt’s linear smoothing, damped trend, Holt-Winters additive and multiplicative, and the Theta method
+
+Models with smoothing weights (SES, damped trend, both Holt-Winters variants, Theta) tune them by grid search on one-step-ahead error. Models that need more history, or positive values, are skipped automatically. The leaderboard shows the top six with a one-line description of each; expand it to see all fifteen. Model selection uses MAE on the last 20% of observations, then refits the chosen model on the full series.
 
 The chart shades the holdout window and overlays the selected model's backtest against what actually happened, so you can see why a model won. Hover for exact values and ranges. The leaderboard ranks models by MAE; click any row to forecast with it instead of the auto pick. Exports include the forecast and heuristic range.
 
-**Holt-Winters tuning.** By default its three smoothing weights (level α, trend β, season γ) are auto-tuned by grid search: the weights with the lowest one-step-ahead squared error on the history win. When scoring the holdout, tuning sees only the training slice, so the holdout stays unseen. A tuning bar under the chart shows the chosen weights; drag any slider to set them by hand and watch the forecast and holdout error update live. On the bundled data, different models win: seasonal naive for subway ridership, Holt for Wikipedia views, and Holt-Winters for CO₂.
+**Holt-Winters tuning.** By default its three smoothing weights (level α, trend β, season γ) are auto-tuned by grid search: the weights with the lowest one-step-ahead squared error on the history win. When scoring the holdout, tuning sees only the training slice, so the holdout stays unseen. A tuning bar under the chart shows the chosen weights; drag any slider to set them by hand and watch the forecast and holdout error update live. On the bundled data, different models win: seasonal naive for subway ridership, seasonal autoregression for Wikipedia views, and the Theta method for CO₂.
 
 **Reading the chart.** Each series has a one-line explanation computed from its data (for example, weekday vs weekend ridership), daily series show a gray 7-day average through the weekly zigzag, and tooltips include the weekday.
 

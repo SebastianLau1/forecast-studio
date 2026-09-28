@@ -1,7 +1,9 @@
-import { names, predict, evaluate, fitHoltWinters, parseCSV, stepDays } from "./forecast.js";
+import { models, names, predict, evaluate, fitHoltWinters, parseCSV, stepDays } from "./forecast.js";
 
 const $ = (id) => document.getElementById(id);
 const MAX_UPLOAD_BYTES = 500_000;
+const LEADERBOARD_TOP = 6;
+const about = Object.fromEntries(models.map((m) => [m.id, m.about]));
 const COLORS = { observed: "#0f1115", average: "#8a93a2", backtest: "#2f5bff", forecast: "#ff4f1f" };
 
 const number = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
@@ -26,6 +28,7 @@ const state = {
   cache: new Map(),
   uploaded: false,
   model: "auto",
+  showAll: false, // leaderboard expanded
   tuning: { mode: "auto", weights: { alpha: 0.3, beta: 0.05, gamma: 0.25 } }, // Holt-Winters smoothing
   result: null,
   animate: true,
@@ -300,14 +303,24 @@ function hideTooltip() {
 function renderLeaderboard() {
   const { scores, model } = state.result;
   const worst = Math.max(...scores.map((s) => s.mae)) || 1;
-  $("comparison").replaceChildren(...scores.map((s, rank) => {
+  const visible = scores
+    .map((s, rank) => ({ s, rank }))
+    .filter(({ s, rank }) => state.showAll || rank < LEADERBOARD_TOP || s.model === model);
+  $("model-count").textContent = `${scores.length} available`;
+  const toggle = $("show-all");
+  toggle.hidden = scores.length <= LEADERBOARD_TOP;
+  toggle.textContent = state.showAll ? `Show top ${LEADERBOARD_TOP}` : `Show all ${scores.length} models`;
+  toggle.setAttribute("aria-expanded", String(state.showAll));
+  $("comparison").replaceChildren(...visible.map(({ s, rank }) => {
     const item = el("li");
     const button = el("button", undefined, s.model === model ? "selected" : "");
     button.type = "button";
     button.setAttribute("aria-label", `Forecast with ${names[s.model]}: MAE ${err(s.mae)}, RMSE ${err(s.rmse)}`);
-    const name = el("span", names[s.model], "name");
+    const name = el("span", undefined, "name");
+    const title = el("span", names[s.model], "title");
     const badge = s.model === model ? (state.model === "auto" ? "Selected · auto" : "Selected") : rank === 0 ? "Lowest MAE" : "";
-    if (badge) name.append(el("span", badge, "badge"));
+    if (badge) title.append(el("span", badge, "badge"));
+    name.append(title, el("small", about[s.model], "about"));
     const bar = el("span", undefined, "bar");
     const fill = el("i");
     fill.style.width = `${Math.max(4, (s.mae / worst) * 100)}%`;
@@ -378,11 +391,21 @@ function renderTuning() {
 
 function selectModel(model) {
   state.model = model;
-  document.querySelectorAll("[data-model]").forEach((button) => {
-    button.setAttribute("aria-checked", String(button.dataset.model === model));
-  });
+  $("model").value = model;
   state.animate = true;
   run();
+}
+
+// Model picker: Auto first, then every model grouped by family.
+for (const family of [...new Set(models.map((m) => m.family))]) {
+  const group = document.createElement("optgroup");
+  group.label = family;
+  for (const m of models.filter((item) => item.family === family)) {
+    const option = el("option", m.name);
+    option.value = m.id;
+    group.append(option);
+  }
+  $("model").append(group);
 }
 
 async function loadFile(file) {
@@ -453,9 +476,12 @@ $("dataset").onchange = () => {
   if (id !== "upload") loadDataset(id);
 };
 
-document.querySelectorAll("[data-model]").forEach((button) => {
-  button.onclick = () => selectModel(button.dataset.model);
-});
+$("model").onchange = () => selectModel($("model").value);
+
+$("show-all").onclick = () => {
+  state.showAll = !state.showAll;
+  renderLeaderboard();
+};
 
 function setTuning(mode) {
   state.tuning.mode = mode;
