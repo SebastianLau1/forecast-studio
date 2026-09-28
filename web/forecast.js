@@ -103,18 +103,4 @@ export function parseCSV(text) {
   return rows;
 }
 
-/** Reproducible synthetic daily series: 84 days with weekly seasonality and deterministic noise. */
-export function sample(kind) {
-  return Array.from({ length: 84 }, (_, i) => {
-    const time = Date.UTC(2026, 0, 1 + i);
-    const weekly = Math.sin((i * 2 * Math.PI) / 7);
-    const wave = Math.sin(i * 1.91) * 3 + Math.cos(i * 0.63) * 2;
-    const value =
-      kind === "demand" ? 180 + i * 0.7 + 32 * weekly + wave
-      : kind === "energy" ? 420 + 85 * weekly + wave * 4
-      : 1200 + i * 12 + 140 * weekly + wave * 10;
-    return { time, date: new Date(time).toISOString().slice(0, 10), value: Math.round(value * 100) / 100 };
-  });
-}
-
 export const stepDays = (rows) => Math.round((rows[1].time - rows[0].time) / DAY);

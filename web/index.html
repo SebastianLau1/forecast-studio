@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta name="description" content="Upload a time series or pick a sample, compare three forecasting models on a chronological holdout, and export the result.">
+    <meta name="description" content="Forecast real public data (NYC subway ridership, Wikipedia views, Mauna Loa CO₂) or your own CSV. Three models compete on a chronological holdout.">
     <meta name="theme-color" content="#f3f4f6">
     <title>Forecast Studio · Sebastian Lau</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f1115'/%3E%3Cpath d='M6 22l6-6 5 3 5-8' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M22 11l4-4' stroke='%23ff4f1f' stroke-width='2.4' stroke-linecap='round' stroke-dasharray='1 3.4'/%3E%3C/svg%3E">
@@ -30,7 +30,7 @@
           <p class="eyebrow">Time-series playground</p>
           <h1>A clearer view of what’s next.</h1>
         </div>
-        <p class="lede">Pick a series or upload your own. Three baseline models compete on a chronological holdout, and the winner forecasts forward. Everything runs in your browser.</p>
+        <p class="lede">Real public data: NYC subway ridership, Wikipedia traffic, and Mauna Loa CO₂. Or upload your own. Three baseline models compete on a chronological holdout, and the winner forecasts forward, all in your browser.</p>
       </section>
 
       <section class="toolbar" aria-label="Forecast setup">
@@ -38,9 +38,7 @@
           <label class="field-label" for="dataset">Data</label>
           <div class="field-row">
             <select id="dataset">
-              <option value="demand">Retail demand · daily</option>
-              <option value="energy">Energy use · daily</option>
-              <option value="traffic">Website traffic · daily</option>
+              <option value="" disabled selected>Loading datasets…</option>
               <option value="upload" hidden disabled>Your upload</option>
             </select>
             <button type="button" class="btn" id="upload-button">Upload CSV</button>
@@ -63,9 +61,10 @@
         <div class="field">
           <label class="field-label" for="period">Season length</label>
           <select id="period">
-            <option value="7">7 obs.</option>
+            <option value="7">7 obs. (weekly cycle)</option>
             <option value="12">12 obs.</option>
             <option value="24">24 obs.</option>
+            <option value="52">52 obs. (yearly, weekly data)</option>
           </select>
         </div>
       </section>
@@ -90,15 +89,15 @@
         <div class="kpi">
           <span>Observations</span>
           <strong id="observations">-</strong>
-          <small id="data-label">Synthetic sample</small>
+          <small id="data-label">&nbsp;</small>
         </div>
       </section>
 
       <section class="chart-card" aria-labelledby="chart-title">
         <div class="chart-head">
           <div>
-            <h2 id="chart-title">Retail demand</h2>
-            <span class="meta" id="chart-meta">DAILY · SYNTHETIC DATA</span>
+            <h2 id="chart-title">Loading…</h2>
+            <span class="meta" id="chart-meta">&nbsp;</span>
           </div>
           <ul class="legend" aria-label="Legend">
             <li><i class="key observed"></i>Observed</li>
@@ -117,6 +116,7 @@
           <span class="meta" id="range"></span>
           <span class="model-tag" id="selected-model"></span>
         </div>
+        <p class="source" id="source"></p>
       </section>
 
       <section class="lower">
@@ -133,11 +133,11 @@
           <p class="insight" id="insight"></p>
           <details>
             <summary>How the evaluation works</summary>
-            <p>Each model trains on the first 80% of observations and predicts the final 20% without seeing it. The lowest mean absolute error wins, then that model is refit on the full series. The shaded range is ±1.96 × holdout RMSE, widened with distance: a heuristic, not a calibrated interval. Samples are synthetic, and uploads never leave your browser.</p>
+            <p>Each model trains on the first 80% of observations and predicts the final 20% without seeing it. The lowest mean absolute error wins, then that model is refit on the full series. The shaded range is ±1.96 × holdout RMSE, widened with distance: a heuristic, not a calibrated interval. The bundled series are real public data, refreshed with a script in the repo; uploads never leave your browser. None of this is financial or operational advice.</p>
           </details>
           <div class="byo">
             <p><b>Bring your own data.</b> A CSV with <code>date,value</code> columns, 21 to 5,000 evenly spaced rows, ISO dates, under 500 KB.</p>
-            <button type="button" class="btn" id="sample-csv">Download example CSV</button>
+            <button type="button" class="btn" id="sample-csv">Download this series</button>
           </div>
         </div>
       </section>

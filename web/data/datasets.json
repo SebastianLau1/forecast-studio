@@ -1,0 +1,50 @@
+[
+  {
+    "id": "subway",
+    "title": "NYC subway ridership",
+    "cadence": "daily",
+    "unit": "riders",
+    "season": 7,
+    "source": "Metropolitan Transportation Authority, via data.ny.gov",
+    "sourceUrl": "https://data.ny.gov/Transportation/MTA-Daily-Ridership-and-Traffic-Beginning-2020/sayj-mze2",
+    "license": "NY Open Data terms of use",
+    "note": "Estimated daily subway ridership across New York City.",
+    "file": "subway.csv",
+    "retrieved": "2026-09-28",
+    "first": "2026-03-27",
+    "last": "2026-09-24",
+    "count": 182
+  },
+  {
+    "id": "wikipedia",
+    "title": "Wikipedia views: Machine learning",
+    "cadence": "daily",
+    "unit": "views",
+    "season": 7,
+    "source": "Wikimedia Pageviews API",
+    "sourceUrl": "https://pageviews.wmcloud.org/?project=en.wikipedia.org&pages=Machine_learning",
+    "license": "CC0",
+    "note": "Daily views of the English Wikipedia article by people (automated traffic excluded).",
+    "file": "wikipedia.csv",
+    "retrieved": "2026-09-28",
+    "first": "2026-03-30",
+    "last": "2026-09-27",
+    "count": 182
+  },
+  {
+    "id": "co2",
+    "title": "Mauna Loa CO₂",
+    "cadence": "weekly",
+    "unit": "ppm",
+    "season": 52,
+    "source": "NOAA Global Monitoring Laboratory",
+    "sourceUrl": "https://gml.noaa.gov/ccgg/trends/data.html",
+    "license": "public domain, U.S. government work",
+    "note": "Weekly mean atmospheric CO₂ at Mauna Loa Observatory, Hawaii. 2 weeks without enough measurements were filled by linear interpolation.",
+    "file": "co2.csv",
+    "retrieved": "2026-09-28",
+    "first": "2021-10-03",
+    "last": "2026-09-20",
+    "count": 260
+  }
+]

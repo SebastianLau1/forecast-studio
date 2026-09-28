@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { predict, evaluate, parseCSV, sample, stepDays } from "../web/forecast.js";
+import { readFile } from "node:fs/promises";
+import { predict, evaluate, parseCSV, stepDays } from "../web/forecast.js";
 
+const data = (name) => readFile(new URL(`../web/data/${name}`, import.meta.url), "utf8");
 const toCSV = (rows) => `date,value\n${rows.map((row) => `${row.date},${row.value}`).join("\n")}`;
 
 test("linear trend extrapolates an exact line", () => {
@@ -32,15 +34,27 @@ test("seasonal model is skipped when training data is shorter than the season", 
   assert.ok(!models.includes("seasonal"));
 });
 
-test("CSV rejects missing dates, duplicate dates, empty and nonfinite values", () => {
-  const rows = sample("demand").slice(0, 25);
+test("every bundled real dataset parses, matches its metadata, and supports its season", async () => {
+  const datasets = JSON.parse(await data("datasets.json"));
+  assert.deepEqual(datasets.map((d) => d.id), ["subway", "wikipedia", "co2"]);
+  for (const meta of datasets) {
+    const rows = parseCSV(await data(meta.file));
+    assert.equal(rows.length, meta.count, meta.id);
+    assert.equal(rows[0].date, meta.first, meta.id);
+    assert.equal(rows.at(-1).date, meta.last, meta.id);
+    assert.equal(stepDays(rows), meta.cadence === "weekly" ? 7 : 1, meta.id);
+    assert.ok(rows.every((row) => row.value > 0), `${meta.id} has no gaps or sentinel values`);
+    assert.match(meta.sourceUrl, /^https:\/\//);
+    const models = evaluate(rows.map((row) => row.value), meta.season).map((r) => r.model);
+    assert.ok(models.includes("seasonal"), `${meta.id} has enough history for a ${meta.season}-step season`);
+  }
+});
+
+test("CSV rejects missing dates, duplicate dates, empty and nonfinite values", async () => {
+  const rows = parseCSV(await data("subway.csv")).slice(0, 25);
   assert.equal(parseCSV(toCSV(rows)).length, 25);
   assert.throws(() => parseCSV(toCSV(rows.filter((_, i) => i !== 8))), /evenly/);
   assert.throws(() => parseCSV(toCSV(rows.map((r, i) => (i === 1 ? rows[0] : r)))), /unique/);
   assert.throws(() => parseCSV(toCSV(rows.map((r, i) => (i === 0 ? { ...r, value: "Infinity" } : r)))), /invalid/);
   assert.throws(() => parseCSV("date,value\n2026-01-01,2"), /21 observations/);
-});
-
-test("step size is reported in days", () => {
-  assert.equal(stepDays(sample("energy")), 1);
 });

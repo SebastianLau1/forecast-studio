@@ -1,4 +1,4 @@
-import { names, predict, evaluate, parseCSV, sample, stepDays } from "./forecast.js";
+import { names, predict, evaluate, parseCSV, stepDays } from "./forecast.js";
 
 const $ = (id) => document.getElementById(id);
 const MAX_UPLOAD_BYTES = 500_000;
@@ -7,16 +7,22 @@ const COLORS = { observed: "#0f1115", backtest: "#2f5bff", forecast: "#ff4f1f" }
 const number = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
 const oneDecimal = new Intl.NumberFormat("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
-const fmt = (n) => number.format(n);
-const err = (n) => oneDecimal.format(n);
+const compactPrecise = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 });
+const whole = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+// Millions read as "4.26M", thousands as whole numbers ("1,769"), small values keep a decimal ("424.3").
+const fmt = (n) => (Math.abs(n) >= 1_000_000 ? compactPrecise.format(n) : Math.abs(n) >= 1000 ? whole.format(n) : number.format(n));
+const err = (n) => (Math.abs(n) >= 1000 ? fmt(n) : oneDecimal.format(n));
 const axis = (n) => (Math.abs(n) >= 10_000 ? compact.format(n) : number.format(n));
 const shortDate = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 const monthYear = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
 const longDate = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
 const state = {
-  rows: sample("demand"),
-  title: "Retail demand",
+  rows: [],
+  title: "",
+  meta: null, // metadata for a bundled dataset; null for uploads
+  datasets: [],
+  cache: new Map(),
   uploaded: false,
   model: "auto",
   result: null,
@@ -51,6 +57,12 @@ function cadence(rows) {
   if (days === 1) return "Daily";
   if (days === 7) return "Weekly";
   return `Every ${days} days`;
+}
+
+function periodWord(count) {
+  const days = state.rows.length > 1 ? stepDays(state.rows) : 1;
+  const word = days === 1 ? "day" : days === 7 ? "week" : "period";
+  return `${count} ${word}${count === 1 ? "" : "s"}`;
 }
 
 /* ---------- Forecast ---------- */
@@ -100,17 +112,32 @@ function renderSummary() {
   $("change").textContent = change === null ? "Versus a zero baseline" : `${change >= 0 ? "+" : ""}${change.toFixed(1)}% vs last observation`;
   $("change").className = change === null ? "" : change >= 0 ? "up" : "down";
   $("end").textContent = fmt(future.at(-1).value);
-  $("end-date").textContent = `${longDate.format(future.at(-1).time)} · period ${horizon}`;
+  $("end-date").textContent = `${longDate.format(future.at(-1).time)} · ${periodWord(horizon)} out`;
   $("mae").textContent = err(score.mae);
   $("mae-note").textContent = `RMSE ${err(score.rmse)} · lower is better`;
   $("observations").textContent = number.format(state.rows.length);
-  $("data-label").textContent = state.uploaded ? "Your upload, kept in this tab" : "Synthetic sample";
+  $("data-label").textContent = state.meta ? `Real data · ${state.meta.unit}` : "Your upload, kept in this tab";
 
   $("chart-title").textContent = state.title;
-  $("chart-meta").textContent = `${cadence(state.rows)} · ${state.uploaded ? "uploaded data" : "synthetic data"}`;
+  $("chart-meta").textContent = `${cadence(state.rows)} · ${state.meta ? state.meta.unit : "uploaded data"}`;
+  renderSource();
   $("range").textContent = `${longDate.format(state.rows[0].time)} → ${longDate.format(future.at(-1).time)}`;
   $("selected-model").textContent = `${names[model]}${state.model === "auto" ? " · auto-selected" : ""}`;
   $("holdout-meta").textContent = `Last ${score.holdout} obs. held out`;
+}
+
+function renderSource() {
+  const source = $("source");
+  if (!state.meta) {
+    source.textContent = "Your uploaded data. It never leaves this tab.";
+    return;
+  }
+  const { note, source: name, sourceUrl, license, retrieved } = state.meta;
+  const link = el("a", name);
+  link.href = sourceUrl;
+  link.target = "_blank";
+  link.rel = "noreferrer";
+  source.replaceChildren(`${note} Source: `, link, ` (${license}), retrieved ${longDate.format(Date.parse(retrieved))}.`);
 }
 
 /* ---------- Chart ---------- */
@@ -325,6 +352,7 @@ async function loadFile(file) {
     if (file.size > MAX_UPLOAD_BYTES) throw Error("CSV must be smaller than 500 KB.");
     state.rows = parseCSV(await file.text());
     state.title = file.name.replace(/\.csv$/i, "");
+    state.meta = null;
     state.uploaded = true;
     state.animate = true;
     const option = $("dataset").querySelector('[value="upload"]');
@@ -332,20 +360,58 @@ async function loadFile(file) {
     option.disabled = false;
     option.textContent = `Your upload · ${file.name}`;
     $("dataset").value = "upload";
+    $("horizon-value").textContent = periodWord(Number($("horizon").value));
     run();
   } catch (error) {
     status(error.message, true);
   }
 }
 
+async function loadDataset(id) {
+  const meta = state.datasets.find((d) => d.id === id);
+  if (!meta) return;
+  try {
+    if (!state.cache.has(id)) {
+      const response = await fetch(`data/${meta.file}`);
+      if (!response.ok) throw Error(`Could not load ${meta.title} (HTTP ${response.status}).`);
+      state.cache.set(id, parseCSV(await response.text()));
+    }
+    state.rows = state.cache.get(id);
+    state.title = meta.title;
+    state.meta = meta;
+    state.uploaded = false;
+    state.animate = true;
+    $("period").value = String(meta.season);
+    $("horizon-value").textContent = periodWord(Number($("horizon").value));
+    run();
+  } catch (error) {
+    status(error.message, true);
+  }
+}
+
+async function init() {
+  try {
+    const response = await fetch("data/datasets.json");
+    if (!response.ok) throw Error(`Could not load datasets (HTTP ${response.status}).`);
+    state.datasets = await response.json();
+    const select = $("dataset");
+    select.querySelector('option[value=""]')?.remove();
+    const upload = select.querySelector('[value="upload"]');
+    for (const meta of state.datasets) {
+      const option = el("option", `${meta.title} · ${meta.cadence}`);
+      option.value = meta.id;
+      select.insertBefore(option, upload);
+    }
+    select.value = state.datasets[0].id;
+    await loadDataset(state.datasets[0].id);
+  } catch (error) {
+    status(`${error.message} You can still upload a CSV.`, true);
+  }
+}
+
 $("dataset").onchange = () => {
-  const kind = $("dataset").value;
-  if (kind === "upload") return;
-  state.rows = sample(kind);
-  state.title = $("dataset").selectedOptions[0].text.split(" ·")[0];
-  state.uploaded = false;
-  state.animate = true;
-  run();
+  const id = $("dataset").value;
+  if (id !== "upload") loadDataset(id);
 };
 
 document.querySelectorAll(".segmented button").forEach((button) => {
@@ -353,13 +419,13 @@ document.querySelectorAll(".segmented button").forEach((button) => {
 });
 
 $("horizon").oninput = () => {
-  $("horizon-value").textContent = `${$("horizon").value} periods`;
-  run();
+  $("horizon-value").textContent = periodWord(Number($("horizon").value));
+  if (state.rows.length) run();
 };
 
 $("period").onchange = () => {
   state.animate = true;
-  run();
+  if (state.rows.length) run();
 };
 
 $("upload-button").onclick = () => $("upload").click();
@@ -376,7 +442,9 @@ window.addEventListener("drop", (event) => {
 });
 
 $("sample-csv").onclick = () => {
-  download(`date,value\n${sample("demand").map((row) => `${row.date},${row.value}`).join("\n")}`, "sample-demand.csv");
+  if (!state.rows.length) return;
+  const name = state.meta ? state.meta.file : "series.csv";
+  download(`date,value\n${state.rows.map((row) => `${row.date},${row.value}`).join("\n")}\n`, name);
 };
 
 $("export").onclick = () => {
@@ -400,4 +468,4 @@ new ResizeObserver(() => {
   renderChart();
 }).observe(chart);
 
-run();
+init();

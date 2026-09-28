@@ -114,6 +114,9 @@ select { flex: 1; min-width: 0; height: 38px; padding: 0 34px 0 12px; border: 1p
 .tooltip em { font-style: normal; font-variant-numeric: tabular-nums; font-weight: 600; }
 
 .chart-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.source { margin: 10px 0 0; font-size: 12.5px; color: var(--faint); }
+.source a { color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+.source a:hover { color: var(--accent); }
 .model-tag { font: 500 12px var(--mono); padding: 4px 9px; border-radius: 6px; background: var(--accent-soft); color: #c2360f; }
 
 /* Lower row */
