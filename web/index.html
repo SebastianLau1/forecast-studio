@@ -1,1 +1,153 @@
-<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Turn a time series into a forecast. Compare models, test assumptions, and bring your own data."><title>Forecast Studio · Sebastian Lau</title><link rel="stylesheet" href="styles.css"><style>:root{--accent:#b5a0ff;--glow:#9c77ff20}.forecastchart{min-height:310px;margin:20px 0 12px}.forecastchart svg{display:block;width:100%;height:auto}.chartlegend{gap:20px;color:var(--muted);font-size:12px}.chartlegend span{display:flex;align-items:center;gap:7px}.chartlegend i{display:inline-block;width:18px;height:3px;background:#eaf0f7}.chartlegend .predicted{background:var(--accent)}.chartlegend .interval{height:10px;background:#b5a0ff33}.winner td{background:#b5a0ff0d}.forecastchart text{font-family:'IBM Plex Mono';font-size:12px;fill:#94a3b8}</style></head><body><header class="appbar"><a class="brand" href="./"><span class="brandmark">↗</span>Forecast Studio</a><nav><a href="https://sebastianlau.is-a.dev">Portfolio</a><a href="https://github.com/SebastianLau1/forecast-studio" target="_blank" rel="noreferrer">Source ↗</a></nav></header><main><div class="intro"><div><span class="kicker">03 / TIME-SERIES PLAYGROUND</span><h1>A clearer view of what’s next.</h1><p>Turn a time series into a forecast. Compare models, test assumptions, and bring your own data.</p></div><span class="badge">PERSONAL PROJECT / 2026</span></div><div class="grid"><aside class="stack"><div class="panel pad stack"><div><span class="kicker">Experiment setup</span><h2 style="margin-top:10px">Choose your signal.</h2></div><div><label for="dataset">Sample dataset</label><select id="dataset"><option value="demand">Retail demand · daily</option><option value="energy">Energy use · daily</option><option value="traffic">Website traffic · daily</option></select></div><div><label class="button full" for="upload" style="cursor:pointer">Upload CSV ↗</label><input type="file" id="upload" accept=".csv,text/csv" hidden><p class="subtle">Two columns: <code>date,value</code>. At least 21 evenly spaced observations.</p><button id="sample-csv" class="full">Download sample CSV</button></div><div class="divider" style="margin:0"></div><div><label for="model">Forecast model</label><select id="model"><option value="auto">Best holdout score</option><option value="trend">Linear trend</option><option value="seasonal">Seasonal naive</option><option value="holt">Holt’s linear smoothing</option></select></div><div><label for="horizon">Forecast horizon <span class="pill" id="horizon-value">14 periods</span></label><input id="horizon" type="range" min="3" max="30" value="14"></div><div><label for="period">Season length</label><select id="period"><option value="7">7 observations</option><option value="12">12 observations</option><option value="24">24 observations</option></select></div><button id="run" class="primary full">Run forecast ↗</button><div id="status" class="status" role="status" aria-live="polite"></div></div><details class="panel pad"><summary>How this forecast works</summary><p>Models train on the first 80% of observations and are compared on the final 20%. The selected model is refit to all observations. Shading shows ±1.96 × holdout RMSE, scaled by forecast distance: a heuristic range, not calibrated coverage. Samples are synthetic. Uploaded data stays in your browser.</p></details></aside><section class="stack"><div class="stats" style="margin:0"><div class="stat"><span>Next period</span><strong id="next">—</strong><small id="change">Forecast value</small></div><div class="stat"><span>Holdout MAE</span><strong id="mae">—</strong><small>Lower is better</small></div><div class="stat"><span>Observations</span><strong id="observations">—</strong><small id="data-label">Synthetic sample</small></div></div><div class="panel"><div class="panelhead"><div><h2 id="chart-title">Retail demand</h2><span class="caption" id="chart-meta">DAILY / SYNTHETIC DATA</span></div><button id="export">Export forecast ↗</button></div><div class="pad"><div class="row chartlegend"><span><i class="actual"></i> Observed</span><span><i class="predicted"></i> Forecast</span><span><i class="interval"></i> Heuristic range</span></div><div id="chart" role="img" aria-label="Observed values and projected forecast" class="forecastchart"></div><div class="row spread"><span class="caption" id="range"></span><span class="pill" id="selected-model"></span></div></div></div><div class="panel"><div class="panelhead"><h2>Model comparison</h2><span class="caption">CHRONOLOGICAL HOLDOUT</span></div><div class="scroll"><table><thead><tr><th>Model</th><th>MAE ↓</th><th>RMSE ↓</th><th>Selection</th></tr></thead><tbody id="comparison"></tbody></table></div></div><div class="panel pad"><span class="kicker">Read the signal</span><p id="insight" style="margin:12px 0 0"></p></div></section></div><footer class="footer"><span>Built by Sebastian Lau · Explore, inspect, experiment.</span><a href="https://github.com/SebastianLau1/forecast-studio">Read the architecture ↗</a></footer></main><script type="module" src="app.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="description" content="Upload a time series or pick a sample, compare three forecasting models on a chronological holdout, and export the result.">
+    <meta name="theme-color" content="#f3f4f6">
+    <title>Forecast Studio · Sebastian Lau</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f1115'/%3E%3Cpath d='M6 22l6-6 5 3 5-8' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M22 11l4-4' stroke='%23ff4f1f' stroke-width='2.4' stroke-linecap='round' stroke-dasharray='1 3.4'/%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="./">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" /><path class="observed" d="M6 22l6-6 5 3 5-8" /><path class="projected" d="M22 11l4-4" /></svg>
+        Forecast Studio
+      </a>
+      <nav>
+        <a href="https://sebastianlau.is-a.dev">Portfolio</a>
+        <a href="https://github.com/SebastianLau1/forecast-studio" target="_blank" rel="noreferrer">Source ↗</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Time-series playground</p>
+          <h1>A clearer view of what’s next.</h1>
+        </div>
+        <p class="lede">Pick a series or upload your own. Three baseline models compete on a chronological holdout, and the winner forecasts forward. Everything runs in your browser.</p>
+      </section>
+
+      <section class="toolbar" aria-label="Forecast setup">
+        <div class="field field-data">
+          <label class="field-label" for="dataset">Data</label>
+          <div class="field-row">
+            <select id="dataset">
+              <option value="demand">Retail demand · daily</option>
+              <option value="energy">Energy use · daily</option>
+              <option value="traffic">Website traffic · daily</option>
+              <option value="upload" hidden disabled>Your upload</option>
+            </select>
+            <button type="button" class="btn" id="upload-button">Upload CSV</button>
+            <input type="file" id="upload" accept=".csv,text/csv" hidden>
+          </div>
+        </div>
+        <div class="field">
+          <span class="field-label" id="model-label">Model</span>
+          <div class="segmented" role="radiogroup" aria-labelledby="model-label">
+            <button type="button" role="radio" aria-checked="true" data-model="auto">Auto</button>
+            <button type="button" role="radio" aria-checked="false" data-model="trend">Trend</button>
+            <button type="button" role="radio" aria-checked="false" data-model="seasonal">Seasonal</button>
+            <button type="button" role="radio" aria-checked="false" data-model="holt">Holt</button>
+          </div>
+        </div>
+        <div class="field field-horizon">
+          <label class="field-label" for="horizon">Horizon <output id="horizon-value" for="horizon">14 periods</output></label>
+          <input id="horizon" type="range" min="3" max="30" value="14">
+        </div>
+        <div class="field">
+          <label class="field-label" for="period">Season length</label>
+          <select id="period">
+            <option value="7">7 obs.</option>
+            <option value="12">12 obs.</option>
+            <option value="24">24 obs.</option>
+          </select>
+        </div>
+      </section>
+      <p class="status" id="status" role="status" aria-live="polite"></p>
+
+      <section class="kpis" aria-label="Forecast summary">
+        <div class="kpi">
+          <span>Next period</span>
+          <strong id="next">-</strong>
+          <small id="change">&nbsp;</small>
+        </div>
+        <div class="kpi">
+          <span>End of horizon</span>
+          <strong id="end">-</strong>
+          <small id="end-date">&nbsp;</small>
+        </div>
+        <div class="kpi">
+          <span>Holdout MAE</span>
+          <strong id="mae">-</strong>
+          <small id="mae-note">Lower is better</small>
+        </div>
+        <div class="kpi">
+          <span>Observations</span>
+          <strong id="observations">-</strong>
+          <small id="data-label">Synthetic sample</small>
+        </div>
+      </section>
+
+      <section class="chart-card" aria-labelledby="chart-title">
+        <div class="chart-head">
+          <div>
+            <h2 id="chart-title">Retail demand</h2>
+            <span class="meta" id="chart-meta">DAILY · SYNTHETIC DATA</span>
+          </div>
+          <ul class="legend" aria-label="Legend">
+            <li><i class="key observed"></i>Observed</li>
+            <li><i class="key backtest"></i>Backtest</li>
+            <li><i class="key forecast"></i>Forecast</li>
+            <li><i class="key band"></i>Heuristic range</li>
+            <li><i class="key holdout"></i>Holdout window</li>
+          </ul>
+          <button type="button" class="btn" id="export">Export CSV ↓</button>
+        </div>
+        <div class="chart-wrap">
+          <div id="chart" class="chart" role="img" aria-label="Observed values, holdout backtest, and projected forecast"></div>
+          <div class="tooltip" id="tooltip" hidden></div>
+        </div>
+        <div class="chart-foot">
+          <span class="meta" id="range"></span>
+          <span class="model-tag" id="selected-model"></span>
+        </div>
+      </section>
+
+      <section class="lower">
+        <div class="card">
+          <div class="card-head">
+            <h2>Model leaderboard</h2>
+            <span class="meta" id="holdout-meta">LAST 20% HELD OUT</span>
+          </div>
+          <ol class="leaderboard" id="comparison"></ol>
+          <p class="hint">Click a model to forecast with it instead of the auto pick.</p>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Read the signal</h2></div>
+          <p class="insight" id="insight"></p>
+          <details>
+            <summary>How the evaluation works</summary>
+            <p>Each model trains on the first 80% of observations and predicts the final 20% without seeing it. The lowest mean absolute error wins, then that model is refit on the full series. The shaded range is ±1.96 × holdout RMSE, widened with distance: a heuristic, not a calibrated interval. Samples are synthetic, and uploads never leave your browser.</p>
+          </details>
+          <div class="byo">
+            <p><b>Bring your own data.</b> A CSV with <code>date,value</code> columns, 21 to 5,000 evenly spaced rows, ISO dates, under 500 KB.</p>
+            <button type="button" class="btn" id="sample-csv">Download example CSV</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>Forecast Studio · built by <a href="https://sebastianlau.is-a.dev">Sebastian Lau</a></span>
+      <a href="https://github.com/SebastianLau1/forecast-studio" target="_blank" rel="noreferrer">View the code on GitHub ↗</a>
+    </footer>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
