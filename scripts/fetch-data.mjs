@@ -71,6 +71,23 @@ async function co2() {
   return { rows: checkSpacing("co2", rows, 7), filled };
 }
 
+// Plain-language descriptions of each series, computed from the data itself.
+const average = (list) => list.reduce((sum, v) => sum + v, 0) / list.length;
+const short = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : Math.round(n).toLocaleString("en-US"));
+
+function weekly(rows, noun) {
+  const isWeekend = (row) => [0, 6].includes(new Date(`${row.date}T00:00:00Z`).getUTCDay());
+  const weekdays = average(rows.filter((r) => !isWeekend(r)).map((r) => r.value));
+  const weekends = average(rows.filter(isWeekend).map((r) => r.value));
+  return `Each dip is a weekend: about ${short(weekdays)} ${noun} on an average weekday vs ${short(weekends)} on Saturdays and Sundays. The gray line is the 7-day average.`;
+}
+
+function yearly(rows) {
+  const values = rows.map((r) => r.value);
+  const rise = average(values.slice(-52)) - average(values.slice(-104, -52));
+  return `Rises about ${rise.toFixed(1)} ppm a year, with a yearly cycle: CO₂ falls each Northern Hemisphere summer as plants grow, then climbs back.`;
+}
+
 const retrieved = iso(Date.now());
 const [subwayRows, wikiRows, co2Result] = await Promise.all([subway(), wikipedia(), co2()]);
 
@@ -85,6 +102,7 @@ const datasets = [
     sourceUrl: "https://data.ny.gov/Transportation/MTA-Daily-Ridership-and-Traffic-Beginning-2020/sayj-mze2",
     license: "NY Open Data terms of use",
     note: "Estimated daily subway ridership across New York City.",
+    pattern: weekly(subwayRows, "riders"),
     rows: subwayRows,
   },
   {
@@ -97,6 +115,7 @@ const datasets = [
     sourceUrl: "https://pageviews.wmcloud.org/?project=en.wikipedia.org&pages=Machine_learning",
     license: "CC0",
     note: "Daily views of the English Wikipedia article by people (automated traffic excluded).",
+    pattern: weekly(wikiRows, "views"),
     rows: wikiRows,
   },
   {
@@ -109,6 +128,7 @@ const datasets = [
     sourceUrl: "https://gml.noaa.gov/ccgg/trends/data.html",
     license: "public domain, U.S. government work",
     note: `Weekly mean atmospheric CO₂ at Mauna Loa Observatory, Hawaii.${co2Result.filled ? ` ${co2Result.filled} week${co2Result.filled === 1 ? "" : "s"} without enough measurements ${co2Result.filled === 1 ? "was" : "were"} filled by linear interpolation.` : ""}`,
+    pattern: yearly(co2Result.rows),
     rows: co2Result.rows,
   },
 ];

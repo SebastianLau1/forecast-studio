@@ -14,9 +14,13 @@ npm test
 
 ## What it does
 
-Pick one of three real datasets or upload (or drop) a `date,value` CSV. Compare linear regression trend, seasonal-naive forecasting, and Holt’s linear smoothing. Model selection uses MAE on the last 20% of observations, then refits the chosen model on the full series.
+Pick one of three real datasets or upload (or drop) a `date,value` CSV. Compare four models: linear regression trend, seasonal naive, Holt’s linear smoothing, and additive Holt-Winters (level + trend + season). Model selection uses MAE on the last 20% of observations, then refits the chosen model on the full series.
 
 The chart shades the holdout window and overlays the selected model's backtest against what actually happened, so you can see why a model won. Hover for exact values and ranges. The leaderboard ranks models by MAE; click any row to forecast with it instead of the auto pick. Exports include the forecast and heuristic range.
+
+**Holt-Winters tuning.** By default its three smoothing weights (level α, trend β, season γ) are auto-tuned by grid search: the weights with the lowest one-step-ahead squared error on the history win. When scoring the holdout, tuning sees only the training slice, so the holdout stays unseen. A tuning bar under the chart shows the chosen weights; drag any slider to set them by hand and watch the forecast and holdout error update live. On the bundled data, different models win: seasonal naive for subway ridership, Holt for Wikipedia views, and Holt-Winters for CO₂.
+
+**Reading the chart.** Each series has a one-line explanation computed from its data (for example, weekday vs weekend ridership), daily series show a gray 7-day average through the weekly zigzag, and tooltips include the weekday.
 
 All processing runs locally in the browser. The upload parser validates increasing, evenly spaced ISO dates, finite numeric values, 21–5,000 rows, and a 500 KB file limit. The model tests cover linear extrapolation, seasonal repetition, holdout scoring, and invalid CSVs.
 

@@ -1,8 +1,8 @@
-import { names, predict, evaluate, parseCSV, stepDays } from "./forecast.js";
+import { names, predict, evaluate, fitHoltWinters, parseCSV, stepDays } from "./forecast.js";
 
 const $ = (id) => document.getElementById(id);
 const MAX_UPLOAD_BYTES = 500_000;
-const COLORS = { observed: "#0f1115", backtest: "#2f5bff", forecast: "#ff4f1f" };
+const COLORS = { observed: "#0f1115", average: "#8a93a2", backtest: "#2f5bff", forecast: "#ff4f1f" };
 
 const number = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
 const oneDecimal = new Intl.NumberFormat("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -16,6 +16,7 @@ const axis = (n) => (Math.abs(n) >= 10_000 ? compact.format(n) : number.format(n
 const shortDate = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 const monthYear = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
 const longDate = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+const dayDate = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
 const state = {
   rows: [],
@@ -25,6 +26,7 @@ const state = {
   cache: new Map(),
   uploaded: false,
   model: "auto",
+  tuning: { mode: "auto", weights: { alpha: 0.3, beta: 0.05, gamma: 0.25 } }, // Holt-Winters smoothing
   result: null,
   animate: true,
   chart: null,
@@ -74,13 +76,15 @@ function run() {
     const period = Number($("period").value);
     const { rows } = state;
     const values = rows.map((row) => row.value);
-    const scores = evaluate(values, period);
+    const manual = state.tuning.mode === "manual" ? state.tuning.weights : undefined;
+    const scores = evaluate(values, period, manual);
+    const hwWeights = manual ?? fitHoltWinters(values, period); // weights behind the Holt-Winters forecast
     const model = state.model === "auto" ? scores[0].model : state.model;
     const score = scores.find((s) => s.model === model);
     if (!score) throw Error("This season length needs more training data. Pick a shorter season or another model.");
 
     const step = rows[1].time - rows[0].time;
-    const future = predict(values, horizon, model, period).map((value, i) => {
+    const future = predict(values, horizon, model, period, model === "holtWinters" ? hwWeights : undefined).map((value, i) => {
       const time = rows.at(-1).time + (i + 1) * step;
       return {
         time,
@@ -90,11 +94,17 @@ function run() {
       };
     });
 
-    state.result = { values, scores, model, score, future, horizon };
+    // A trailing 7-day average makes the level visible through the weekday/weekend zigzag.
+    const average = stepDays(rows) === 1 && values.length > 14
+      ? values.map((_, i) => (i >= 6 ? values.slice(i - 6, i + 1).reduce((sum, v) => sum + v, 0) / 7 : null))
+      : null;
+
+    state.result = { values, average, scores, model, score, future, horizon, hwWeights };
     renderSummary();
     renderChart();
     renderLeaderboard();
     renderInsight();
+    renderTuning();
     state.animate = false;
     status(`Forecast updated in ${Math.max(1, Math.round(performance.now() - started))} ms, computed in your browser.`);
   } catch (error) {
@@ -121,6 +131,9 @@ function renderSummary() {
   $("chart-title").textContent = state.title;
   $("chart-meta").textContent = `${cadence(state.rows)} · ${state.meta ? state.meta.unit : "uploaded data"}`;
   renderSource();
+  $("chart-note").textContent = state.meta?.pattern ?? "";
+  $("chart-note").hidden = !state.meta?.pattern;
+  $("legend-average").hidden = !state.result.average;
   $("range").textContent = `${longDate.format(state.rows[0].time)} → ${longDate.format(future.at(-1).time)}`;
   $("selected-model").textContent = `${names[model]}${state.model === "auto" ? " · auto-selected" : ""}`;
   $("holdout-meta").textContent = `Last ${score.holdout} obs. held out`;
@@ -177,6 +190,7 @@ function renderChart() {
   const fade = state.animate ? " fade" : "";
 
   const observed = points(values.map((v, i) => [i, v]));
+  const average = state.result.average ? points(state.result.average.map((v, i) => [i, v]).filter(([, v]) => v !== null)) : "";
   const backtest = points(score.backtest.map((v, i) => [score.start + i, v]));
   const forecast = points([[n - 1, values.at(-1)], ...future.map((f, i) => [n + i, f.value])]);
   const band = points([
@@ -197,6 +211,7 @@ function renderChart() {
     <g class="series${draw}">
       <polygon class="area" points="${x(0)},${base} ${observed} ${x(n - 1)},${base}"/>
       <polyline class="observed" points="${observed}"/>
+      ${average ? `<polyline class="average" points="${average}"/>` : ""}
     </g>
     <polyline class="backtest${fade}" points="${backtest}"/>
     <line class="now" x1="${x(n - 1)}" x2="${x(n - 1)}" y1="${pad.t}" y2="${base}"/>
@@ -236,6 +251,7 @@ function showTooltip(event) {
 
   const rows = [];
   if (i < n) rows.push(["Observed", values[i], COLORS.observed]);
+  if (i < n && state.result.average?.[i] != null) rows.push(["7-day average", state.result.average[i], COLORS.average]);
   if (i >= score.start && i < n) rows.push(["Backtest", score.backtest[i - score.start], COLORS.backtest]);
   if (i >= n) {
     const f = future[i - n];
@@ -253,7 +269,8 @@ function showTooltip(event) {
     .join("");
 
   const tip = $("tooltip");
-  tip.replaceChildren(el("b", longDate.format(dateAt(i))), ...rows.map(([label, value, color]) => {
+  const dateFormat = stepDays(state.rows) === 1 ? dayDate : longDate;
+  tip.replaceChildren(el("b", dateFormat.format(dateAt(i))), ...rows.map(([label, value, color]) => {
     const row = el("div");
     const name = el("span");
     if (color) {
@@ -335,11 +352,33 @@ function trendPhrase(last, end) {
   return `, ${change > 0 ? "up" : "down"} ${Math.abs(change).toFixed(1)}% from the last value. `;
 }
 
+function renderTuning() {
+  const { scores, hwWeights } = state.result;
+  const hw = scores.find((s) => s.model === "holtWinters");
+  $("tuning").classList.toggle("is-disabled", !hw);
+  document.querySelectorAll("[data-tuning]").forEach((button) => {
+    button.setAttribute("aria-checked", String(button.dataset.tuning === state.tuning.mode));
+  });
+  if (!hw) {
+    $("tuning-score").textContent = "Needs two full seasons of history";
+    return;
+  }
+  const shown = state.tuning.mode === "manual" ? state.tuning.weights : hwWeights;
+  for (const key of ["alpha", "beta", "gamma"]) {
+    $(key).value = String(shown[key]);
+    $(`${key}-value`).textContent = shown[key].toFixed(2);
+  }
+  $("tuning-score").replaceChildren("Holt-Winters holdout MAE ", el("b", err(hw.mae)), ` · rank ${scores.indexOf(hw) + 1} of ${scores.length}`);
+  $("tuning-help").textContent = state.tuning.mode === "auto"
+    ? "Auto-tune picks the weights with the lowest one-step-ahead error on past data, then scores them on the holdout. Drag a slider to take over."
+    : "Manual weights: higher values chase recent changes, lower values smooth them out. Watch the holdout error as you drag.";
+}
+
 /* ---------- Inputs ---------- */
 
 function selectModel(model) {
   state.model = model;
-  document.querySelectorAll(".segmented button").forEach((button) => {
+  document.querySelectorAll("[data-model]").forEach((button) => {
     button.setAttribute("aria-checked", String(button.dataset.model === model));
   });
   state.animate = true;
@@ -414,9 +453,26 @@ $("dataset").onchange = () => {
   if (id !== "upload") loadDataset(id);
 };
 
-document.querySelectorAll(".segmented button").forEach((button) => {
+document.querySelectorAll("[data-model]").forEach((button) => {
   button.onclick = () => selectModel(button.dataset.model);
 });
+
+function setTuning(mode) {
+  state.tuning.mode = mode;
+  if (mode === "manual") {
+    state.tuning.weights = { alpha: Number($("alpha").value), beta: Number($("beta").value), gamma: Number($("gamma").value) };
+  }
+  // Show Holt-Winters so the effect of the weights is visible on the chart.
+  if (mode === "manual" && state.model !== "holtWinters") selectModel("holtWinters");
+  else if (state.rows.length) run();
+}
+
+document.querySelectorAll("[data-tuning]").forEach((button) => {
+  button.onclick = () => setTuning(button.dataset.tuning);
+});
+for (const key of ["alpha", "beta", "gamma"]) {
+  $(key).oninput = () => setTuning("manual");
+}
 
 $("horizon").oninput = () => {
   $("horizon-value").textContent = periodWord(Number($("horizon").value));

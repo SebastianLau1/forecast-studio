@@ -30,7 +30,7 @@
           <p class="eyebrow">Time-series playground</p>
           <h1>A clearer view of what’s next.</h1>
         </div>
-        <p class="lede">Real public data: NYC subway ridership, Wikipedia traffic, and Mauna Loa CO₂. Or upload your own. Three baseline models compete on a chronological holdout, and the winner forecasts forward, all in your browser.</p>
+        <p class="lede">Real public data: NYC subway ridership, Wikipedia traffic, and Mauna Loa CO₂. Or upload your own. Four models compete on a chronological holdout, and the winner forecasts forward, all in your browser.</p>
       </section>
 
       <section class="toolbar" aria-label="Forecast setup">
@@ -52,6 +52,7 @@
             <button type="button" role="radio" aria-checked="false" data-model="trend">Trend</button>
             <button type="button" role="radio" aria-checked="false" data-model="seasonal">Seasonal</button>
             <button type="button" role="radio" aria-checked="false" data-model="holt">Holt</button>
+            <button type="button" role="radio" aria-checked="false" data-model="holtWinters">Holt-Winters</button>
           </div>
         </div>
         <div class="field field-horizon">
@@ -101,6 +102,7 @@
           </div>
           <ul class="legend" aria-label="Legend">
             <li><i class="key observed"></i>Observed</li>
+            <li id="legend-average"><i class="key average"></i>7-day average</li>
             <li><i class="key backtest"></i>Backtest</li>
             <li><i class="key forecast"></i>Forecast</li>
             <li><i class="key band"></i>Heuristic range</li>
@@ -108,6 +110,7 @@
           </ul>
           <button type="button" class="btn" id="export">Export CSV ↓</button>
         </div>
+        <p class="chart-note" id="chart-note" hidden></p>
         <div class="chart-wrap">
           <div id="chart" class="chart" role="img" aria-label="Observed values, holdout backtest, and projected forecast"></div>
           <div class="tooltip" id="tooltip" hidden></div>
@@ -115,6 +118,22 @@
         <div class="chart-foot">
           <span class="meta" id="range"></span>
           <span class="model-tag" id="selected-model"></span>
+        </div>
+        <div class="tuning" id="tuning">
+          <div class="tuning-head">
+            <span class="field-label" id="tuning-label">Holt-Winters tuning</span>
+            <div class="segmented compact" role="radiogroup" aria-labelledby="tuning-label">
+              <button type="button" role="radio" aria-checked="true" data-tuning="auto">Auto-tune</button>
+              <button type="button" role="radio" aria-checked="false" data-tuning="manual">Manual</button>
+            </div>
+            <span class="tuning-score" id="tuning-score" aria-live="polite"></span>
+          </div>
+          <div class="tuning-sliders">
+            <label><span>Level <em>α</em></span><input type="range" id="alpha" min="0.05" max="0.95" step="0.05" value="0.3"><output id="alpha-value" for="alpha">0.30</output></label>
+            <label><span>Trend <em>β</em></span><input type="range" id="beta" min="0" max="0.5" step="0.01" value="0.05"><output id="beta-value" for="beta">0.05</output></label>
+            <label><span>Season <em>γ</em></span><input type="range" id="gamma" min="0.05" max="0.95" step="0.05" value="0.25"><output id="gamma-value" for="gamma">0.25</output></label>
+          </div>
+          <p class="tuning-help" id="tuning-help">How fast the level, trend, and seasonal pattern react to new data. Higher values chase recent changes; lower values smooth them out.</p>
         </div>
         <p class="source" id="source"></p>
       </section>
